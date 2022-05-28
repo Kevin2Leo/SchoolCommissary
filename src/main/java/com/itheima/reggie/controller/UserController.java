@@ -9,6 +9,7 @@ import com.itheima.reggie.utils.ValidateCodeUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpSession;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
  * @Description:
@@ -32,6 +34,9 @@ public class UserController {
     @Autowired
     private UserService userService;
 
+    @Autowired
+    private RedisTemplate redisTemplate;
+
     /**
      * 发送手机验证码短信
      *
@@ -39,7 +44,7 @@ public class UserController {
      * @return
      */
     @PostMapping("/sendMsg")
-    public R<String> sendMsg(@RequestBody User user, HttpSession session) {
+    public R<String> sendMsg(@RequestBody User user) {
 
         Integer templateId = 1411771;
         //获取手机号
@@ -51,8 +56,12 @@ public class UserController {
             String[] codes = {code};
             //调用腾讯云的API完成短信发送任务
 //            SMSUtils.sendMessage(phone, templateId, codes, "冷靖个人公众号");
-            //需要将生成的验证码保存起来
-            session.setAttribute(phone, code);
+            //需要将生成的验证码保存在session中
+            //session.setAttribute(phone, code);
+
+            //优化：将生成的验证码缓存到Redis中,并且把有效时间设置为5分钟
+            redisTemplate.opsForValue().set(phone, code, 5L, TimeUnit.MINUTES);
+
             return R.success("已成功发送验证码");
         }
 
@@ -77,21 +86,27 @@ public class UserController {
         //从map中获得验证码
         String code = map.get("code").toString();
         //从session中获取保存的验证码
-        String codeInSession = (String) session.getAttribute(phone);
+        //String codeInSession = (String) session.getAttribute(phone);
+
+        //优化：从Redis中获取保存的验证码
+        String codeInRedis = (String) redisTemplate.opsForValue().get(phone);
+
         //验证码比对，用户提交过来验证码 和 session保存的验证码比对
-        if (code != null && codeInSession != null && codeInSession.equals(code)) {//比对成功
+        if (code != null && codeInRedis != null && codeInRedis.equals(code)) {//比对成功
             //判断手机号是否为新用户
             LambdaQueryWrapper<User> queryWrapper = new LambdaQueryWrapper<>();
-            queryWrapper.eq(User::getPhone,phone);
+            queryWrapper.eq(User::getPhone, phone);
             User user = userService.getOne(queryWrapper);
-            if (user == null){//说明是新用户
+            if (user == null) {//说明是新用户
                 //则 直接新增用户表
                 user = new User();
                 user.setPhone(phone);
                 user.setStatus(1);
                 userService.save(user);
             }
-            session.setAttribute("user",user.getId());
+            session.setAttribute("user", user.getId());
+            //如果用户登录成功, 那么就删除Redis中的验证码
+            redisTemplate.delete(phone);
             return R.success(user);
         }
         return R.error("登录失败");
