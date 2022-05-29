@@ -162,17 +162,13 @@ public class DishController {
 
         dishService.updateById(dishDto);//因为DishDto是Dish的子类
 
-        Long dishId = dishDto.getId();
-        List<DishFlavor> flavorList = dishDto.getFlavors();
-        for (DishFlavor dishFlavor : flavorList) {
-            dishFlavor.setDishId(dishId);
-        }
         //对于口味，采用先删后加的方式
+        Long dishId = dishDto.getId();
         LambdaQueryWrapper<DishFlavor> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(DishFlavor::getDishId, dishId);
-//        if (dishFlavorService.count(queryWrapper) > 0){//如果dishId 的口味存在
         dishFlavorService.remove(queryWrapper);//先删除
-//        }
+
+        List<DishFlavor> flavorList = dishDto.getFlavors();
         dishFlavorService.saveBatch(flavorList);//再添加
 
         //数据库改变后，要删除Redis中相应的缓存
