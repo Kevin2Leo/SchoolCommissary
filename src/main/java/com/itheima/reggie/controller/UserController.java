@@ -47,6 +47,7 @@ public class UserController {
     public R<String> sendMsg(@RequestBody User user) {
 
         Integer templateId = 1411771;
+
         //获取手机号
         String phone = user.getPhone();
         if (StringUtils.isNotEmpty(phone)) {

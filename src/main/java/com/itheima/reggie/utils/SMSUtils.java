@@ -18,7 +18,7 @@ public class SMSUtils {
      * 发送短信
      * @param phoneNumber
      * @param templateId
-     * @param param
+     * @param params
      * @param signName
      */
     public static void sendMessage(String phoneNumber, Integer templateId, String[] params, String signName) {
